@@ -7,7 +7,11 @@ const blogSchema = new mongoose.Schema({
   title: String,
   author: String,
   url: String,
-  likes: Number
+  likes: Number,
+  user: {
+    type: mongoose.Schema.Types.ObjectId, // Guardamos solo el ID
+    ref: 'User'
+  }
 })
 
 const Blog = mongoose.model('Blog', blogSchema)
