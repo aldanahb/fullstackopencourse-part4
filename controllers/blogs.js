@@ -82,7 +82,13 @@ blogsRouter.delete('/:id', async (request, response, next) => {
       })
     }
 
+    // eliminar blog de la bdd de blog
     await Blog.findByIdAndDelete(request.params.id)
+
+    // eliminar blog de la bdd de user
+    user.blogs = user.blogs.filter(b => b.toString() !== request.params.id)
+    await user.save()
+
     response.status(204).end()
 
   } catch(error) {

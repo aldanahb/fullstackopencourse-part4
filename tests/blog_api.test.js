@@ -15,26 +15,30 @@ beforeEach(async () => {
   await Blog.deleteMany({})
   await User.deleteMany({})
 
-  // creamos usuario de prueba
+  // crear usuario de prueba
   const user = new User({
     name: 'Tom',
     username: 'tom_123',
-    passwordHash: 'secret'
+    passwordHash: 'secret' 
   })
 
-  await user.save()
+  const savedUser = await user.save()
 
   const userToken = {
-      username: user.username,
-      id: user._id
-    }
+    username: savedUser.username,
+    id: savedUser._id,
+  }
 
   token = jwt.sign(userToken, process.env.SECRET)
 
   const blogObjects = helper.initialBlogs
-    .map(blog => new Blog({ ...blog, user: user._id})) // guardar blogs con usuario
+    .map(blog => new Blog({ ...blog, user: savedUser._id }))
+  
   const promiseArray = blogObjects.map(blog => blog.save())
-  await Promise.all(promiseArray)
+  const savedBlogs = await Promise.all(promiseArray)
+
+  savedUser.blogs = savedUser.blogs.concat(savedBlogs.map(b => b._id))
+  await savedUser.save()
 })
 
 describe('GET', () => {
