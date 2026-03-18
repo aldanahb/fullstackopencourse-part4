@@ -10,6 +10,7 @@ const app = require('../app')
 
 const api = supertest(app)
 let token
+let savedBlogs
 
 beforeEach(async () => {
   await Blog.deleteMany({})
@@ -35,7 +36,7 @@ beforeEach(async () => {
     .map(blog => new Blog({ ...blog, user: savedUser._id }))
   
   const promiseArray = blogObjects.map(blog => blog.save())
-  const savedBlogs = await Promise.all(promiseArray)
+  savedBlogs = await Promise.all(promiseArray)
 
   savedUser.blogs = savedUser.blogs.concat(savedBlogs.map(b => b._id))
   await savedUser.save()
@@ -97,7 +98,7 @@ describe('POST', () => {
 
 describe('DELETE', () => { 
   test('A blog is successfully deleted', async () => { 
-    const idDelete = '5a422a851b54a676234d17f7'
+    const idDelete = savedBlogs[0]._id.toString()
     await api.delete('/api/blogs/' + idDelete).set('authorization', `Bearer ${token}`).expect(204)
 
     const blogsAtEnd = await api.get('/api/blogs')
@@ -108,7 +109,7 @@ describe('DELETE', () => {
   })
 
   test('A blog is not deleted if the proper token is not provided, and the status code 401 is returned', async () => { 
-    const idDelete = '5a422a851b54a676234d17f7'
+    const idDelete = savedBlogs[0]._id.toString()
     await api.delete('/api/blogs/' + idDelete).expect(401)
 
     const blogsAtEnd = await api.get('/api/blogs')
@@ -117,15 +118,48 @@ describe('DELETE', () => {
     const ids = blogsAtEnd.body.map(b => b.id)
     assert.equal(ids.includes(idDelete), true)
   })
+
+  test('A blog is not deleted if the creator is not the one who tries to delete it', async () => {
+    const idDelete = savedBlogs[0]._id.toString() // blog de Tom
+
+    // usuario impostor
+    const secondUser = new User({
+      username: 'impostor',
+      passwordHash: 'secretkey'
+    })
+
+    await secondUser.save()
+
+    const secondUserToken = {
+      username: secondUser.username,
+      id: secondUser._id,
+    }
+
+    const tokenImpostor = jwt.sign(secondUserToken, process.env.SECRET)
+
+    // intentamos eliminar el blog de Tom con el token del impostor
+    await api.delete(`/api/blogs/${idDelete}`).set('Authorization', `Bearer ${tokenImpostor}`).expect(401) 
+
+    const blogsAtEnd = await api.get('/api/blogs')
+    assert.equal(blogsAtEnd.body.length, helper.initialBlogs.length)
+
+    const ids = blogsAtEnd.body.map(b => b.id)
+    assert.equal(ids.includes(idDelete), true)
+
+  })
 })
 
 describe('PUT', () => { 
-  test('A blog is successfully updated', async () => { 
+  test('A blog with a valid ID is successfully updated', async () => { 
     const newData = helper.dataUpdated
 
-    const idUpdate = '5a422a851b54a676234d17f7' // id que existe
+    const idUpdate = savedBlogs[0]._id.toString()
     const response = await api.put('/api/blogs/' + idUpdate).send(newData).expect(200)
     assert.equal(newData.likes, response.body.likes)
+  })
+
+  test('A blog with an invalid ID is not updated', async() => { 
+    const newData = helper.dataUpdated
 
     const idNotExists = '5a422a451b54a676234d15f7'// id que no existe
     await api.put('/api/blogs/' + idNotExists).send(newData).expect(404)
