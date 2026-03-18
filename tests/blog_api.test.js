@@ -2,16 +2,37 @@ const { test, after, beforeEach, describe } = require('node:test')
 const assert = require('node:assert')
 const helper = require('../utils/test_helper')
 const Blog = require('../models/blog')
+const User = require('../models/user')
 const mongoose = require('mongoose')
 const supertest = require('supertest')
+const jwt = require('jsonwebtoken')
 const app = require('../app')
 
 const api = supertest(app)
+let token
 
 beforeEach(async () => {
   await Blog.deleteMany({})
+  await User.deleteMany({})
+
+  // creamos usuario de prueba
+  const user = new User({
+    name: 'Tom',
+    username: 'tom_123',
+    passwordHash: 'secret'
+  })
+
+  await user.save()
+
+  const userToken = {
+      username: user.username,
+      id: user._id
+    }
+
+  token = jwt.sign(userToken, process.env.SECRET)
+
   const blogObjects = helper.initialBlogs
-    .map(blog => new Blog(blog))
+    .map(blog => new Blog({ ...blog, user: user._id})) // guardar blogs con usuario
   const promiseArray = blogObjects.map(blog => blog.save())
   await Promise.all(promiseArray)
 })
@@ -33,7 +54,7 @@ describe('GET', () => {
 describe('POST', () => {
   test('A blog is created correctly', async ()  => { 
     const newBlog = helper.dataBlog
-    const response = await api.post('/api/blogs').send(newBlog).expect(201).expect('Content-Type', /application\/json/)
+    const response = await api.post('/api/blogs').set('authorization', `Bearer ${token}`).send(newBlog).expect(201).expect('Content-Type', /application\/json/)
 
     // comparar la información que se quería guardar con la información guardada 
     assert.equal(newBlog.title, response.body.title)
@@ -48,7 +69,7 @@ describe('POST', () => {
 
   test('A blog without the likes property will have a default value of zero for that property', async () => { 
     const newBlogWithoutLikes = helper.dataBlogWithoutLikes
-    const response = await api.post('/api/blogs').send(newBlogWithoutLikes)
+    const response = await api.post('/api/blogs').set('authorization', `Bearer ${token}`).send(newBlogWithoutLikes)
     assert.equal(response.body.likes, 0)
   })
 
@@ -57,17 +78,23 @@ describe('POST', () => {
     const validBlog = helper.dataBlog
 
     for(const invalidBlog of invalidBlogs) { // se prueba un blog sin título, un blog sin URL, y un blog sin título ni URL
-      await api.post('/api/blogs').send(invalidBlog).expect(400)
+      await api.post('/api/blogs').set('authorization', `Bearer ${token}`).send(invalidBlog).expect(400)
     }
 
-    await api.post('/api/blogs').send(validBlog).expect(201)
+    await api.post('/api/blogs').set('authorization', `Bearer ${token}`).send(validBlog).expect(201)
+  })
+
+  test('Adding a blog fails with the appropriate status code 401 Unauthorized if a token is not provided', async() => { 
+    const dataBlog = helper.dataBlog
+
+    await api.post('/api/blogs').send(dataBlog).expect(401)
   })
 })
 
 describe('DELETE', () => { 
   test('A blog is successfully deleted', async () => { 
     const idDelete = '5a422a851b54a676234d17f7'
-    await api.delete('/api/blogs/' + idDelete).expect(204)
+    await api.delete('/api/blogs/' + idDelete).set('authorization', `Bearer ${token}`).expect(204)
 
     const blogsAtEnd = await api.get('/api/blogs')
     assert.equal(blogsAtEnd.body.length, helper.initialBlogs.length - 1)
