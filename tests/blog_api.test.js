@@ -81,7 +81,7 @@ describe('POST', () => {
     const invalidBlogs = helper.dataBlogsWithoutTitleURL
     const validBlog = helper.dataBlog
 
-    for(const invalidBlog of invalidBlogs) { // se prueba un blog sin título, un blog sin URL, y un blog sin título ni URL
+    for(const invalidBlog of invalidBlogs) { // se prueba un blog sin título, un blog sin URL y un blog sin título ni URL
       await api.post('/api/blogs').set('authorization', `Bearer ${token}`).send(invalidBlog).expect(400)
     }
 
@@ -105,6 +105,17 @@ describe('DELETE', () => {
 
     const ids = blogsAtEnd.body.map(b => b.id)
     assert.equal(ids.includes(idDelete), false)
+  })
+
+  test('A blog is not deleted if the proper token is not provided, and the status code 401 is returned', async () => { 
+    const idDelete = '5a422a851b54a676234d17f7'
+    await api.delete('/api/blogs/' + idDelete).expect(401)
+
+    const blogsAtEnd = await api.get('/api/blogs')
+    assert.equal(blogsAtEnd.body.length, helper.initialBlogs.length)
+
+    const ids = blogsAtEnd.body.map(b => b.id)
+    assert.equal(ids.includes(idDelete), true)
   })
 })
 
